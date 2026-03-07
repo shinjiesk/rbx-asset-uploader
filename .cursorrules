@@ -14,6 +14,13 @@
 - `npm run build` でビルド確認
 - `npm run lint` でリント
 
+## 秘匿情報の管理
+
+- `.env.local` には非秘匿情報（NEXTAUTH_URL, DATABASE_URL）のみ記載する
+- 秘匿情報（NEXTAUTH_SECRET, ROBLOX_CLIENT_SECRET, ENCRYPTION_KEY）は `.env.local` に書かない
+- 秘匿情報はシェル環境変数 (`export`) または Vercel 環境変数 UI で管理する
+- `.env` / `.env.local` は `.cursorignore` で AI の読み取り対象外にしている
+
 ## スペック
 
 - 詳細仕様: docs/spec.md

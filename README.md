@@ -41,7 +41,7 @@ npm run dev
 
 ### 環境変数
 
-`.env.local.example` をコピーして `.env.local` を作成:
+**非秘匿情報** — `.env.local` に記載OK:
 
 ```bash
 cp .env.local.example .env.local
@@ -50,11 +50,26 @@ cp .env.local.example .env.local
 | 変数 | 説明 |
 |------|------|
 | `NEXTAUTH_URL` | アプリのURL (dev: `http://localhost:3000`) |
-| `NEXTAUTH_SECRET` | セッション暗号化キー |
-| `ROBLOX_CLIENT_ID` | Roblox OAuth アプリのClient ID (空ならdev mock有効) |
-| `ROBLOX_CLIENT_SECRET` | Roblox OAuth アプリのClient Secret |
-| `ENCRYPTION_KEY` | トークン・APIキー暗号化用 32バイトhex (64文字) |
 | `DATABASE_URL` | DB接続URL (dev: `file:./prisma/dev.db`) |
+
+**秘匿情報** — `.env.local` には書かず、シェル環境変数または Vercel 環境変数で管理:
+
+```bash
+export NEXTAUTH_SECRET="$(openssl rand -base64 32)"
+export ROBLOX_CLIENT_ID="your-client-id"
+export ROBLOX_CLIENT_SECRET="your-client-secret"
+export ENCRYPTION_KEY="$(openssl rand -hex 32)"
+npm run dev
+```
+
+| 変数 | 説明 |
+|------|------|
+| `NEXTAUTH_SECRET` | セッション暗号化キー |
+| `ROBLOX_CLIENT_ID` | Roblox OAuth Client ID (空ならdev mock有効) |
+| `ROBLOX_CLIENT_SECRET` | Roblox OAuth Client Secret |
+| `ENCRYPTION_KEY` | トークン・APIキー暗号化用 32バイトhex (64文字) |
+
+> **なぜ `.env.local` に秘匿情報を書かないのか**: AIコーディングツールがローカルファイルを読み取る可能性があるため。`.cursorignore` でも保護しているが、ファイルに書かないのが最も安全。
 
 ### Studio プラグイン
 
