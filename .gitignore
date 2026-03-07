@@ -45,3 +45,7 @@ Assets.lua
 *.njsproj
 *.sln
 *.sw?
+
+/lib/generated/prisma
+.env
+dev.db

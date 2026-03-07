@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id               String   @id @default(uuid())
+  robloxUserId     String   @unique @map("roblox_user_id")
+  robloxUsername   String?  @map("roblox_username")
+  robloxDisplayName String? @map("roblox_display_name")
+  robloxAvatarUrl  String?  @map("roblox_avatar_url")
+  accessToken      String?  @map("access_token")
+  refreshToken     String?  @map("refresh_token")
+  tokenExpiresAt   DateTime? @map("token_expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  groupProfiles GroupProfile[]
+  projects      Project[]
+
+  @@map("users")
+}
+
+model GroupProfile {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  groupId   String   @map("group_id")
+  groupName String   @map("group_name")
+  roleName  String?  @map("role_name")
+  apiKey    String   @map("api_key")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@unique([userId, groupId])
+  @@map("group_profiles")
+}
+
+model Project {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  name           String
+  creatorType    String   @map("creator_type")
+  groupProfileId String?  @map("group_profile_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupProfile GroupProfile? @relation(fields: [groupProfileId], references: [id], onDelete: SetNull)
+  places       ProjectPlace[]
+  assetEntries AssetEntry[]
+
+  @@map("projects")
+}
+
+model ProjectPlace {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  placeId   String   @map("place_id")
+  placeName String?  @map("place_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, placeId])
+  @@map("project_places")
+}
+
+model AssetEntry {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  filename  String
+  category  String
+  assetId   String   @map("asset_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, filename])
+  @@map("asset_entries")
+}
