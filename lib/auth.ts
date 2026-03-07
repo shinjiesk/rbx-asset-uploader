@@ -80,7 +80,7 @@ const authConfig: NextAuthConfig = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub!;
-        (session as Record<string, unknown>).robloxUserId =
+        (session as unknown as Record<string, unknown>).robloxUserId =
           token.robloxUserId as string;
       }
       return session;
