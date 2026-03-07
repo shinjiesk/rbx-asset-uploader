@@ -61,11 +61,15 @@ export async function GET(request: NextRequest) {
       assetId: e.assetId,
     }));
 
+    if (format === "json") {
+      return NextResponse.json(assets);
+    }
+
     const toml = generateLockfileToml(assets);
     return new NextResponse(toml, {
       headers: {
         "Content-Type": "text/plain",
-        "Content-Disposition": 'attachment; filename="lockfile.toml"',
+        "Content-Disposition": 'attachment; filename="assets.lock.toml"',
       },
     });
   } catch (err) {

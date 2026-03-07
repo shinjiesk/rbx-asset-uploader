@@ -12,6 +12,57 @@ import { getAssetTypeInfo } from "@/lib/asset-types";
 
 const MAX_CONCURRENT = 3;
 
+function ExportMenu({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false);
+  const formats = [
+    { label: "CSV", format: "csv", ext: "csv" },
+    { label: "TSV", format: "tsv", ext: "tsv" },
+    { label: "Markdown", format: "markdown", ext: "md" },
+  ];
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100"
+      >
+        エクスポート ▾
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-10 mt-1 w-40 rounded-lg border border-gray-200 bg-white shadow-lg">
+          {formats.map((f) => (
+            <a
+              key={f.format}
+              href={`/api/export?projectId=${projectId}&format=${f.format}&category=all`}
+              download={`assets.${f.ext}`}
+              className="block px-4 py-2 text-sm hover:bg-gray-50"
+              onClick={() => setOpen(false)}
+            >
+              {f.label}
+            </a>
+          ))}
+          <button
+            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
+            onClick={async () => {
+              setOpen(false);
+              const res = await fetch(
+                `/api/export?projectId=${projectId}&format=tsv&category=all`
+              );
+              if (res.ok) {
+                const text = await res.text();
+                await navigator.clipboard.writeText(text);
+                alert("クリップボードにコピーしました");
+              }
+            }}
+          >
+            クリップボードにコピー
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -266,26 +317,26 @@ export default function Home() {
         />
       )}
 
-      {/* Actions after upload */}
-      {selectedProjectId &&
-        files.some((f) => f.status === "success") && (
-          <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href={`/api/codegen?projectId=${selectedProjectId}`}
-              download="Assets.lua"
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-            >
-              Assets.lua をダウンロード
-            </a>
-            <a
-              href={`/api/lockfile?projectId=${selectedProjectId}&format=toml`}
-              download="assets.lock.toml"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100"
-            >
-              ロックファイルをエクスポート
-            </a>
-          </div>
-        )}
+      {/* Actions */}
+      {selectedProjectId && (
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href={`/api/codegen?projectId=${selectedProjectId}`}
+            download="Assets.lua"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+          >
+            Assets.lua
+          </a>
+          <a
+            href={`/api/lockfile?projectId=${selectedProjectId}&format=toml`}
+            download="assets.lock.toml"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100"
+          >
+            ロックファイル
+          </a>
+          <ExportMenu projectId={selectedProjectId} />
+        </div>
+      )}
 
       {/* No project selected hint */}
       {!selectedProjectId && (

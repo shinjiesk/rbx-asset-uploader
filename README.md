@@ -1,118 +1,81 @@
 # Roblox Asset Uploader
 
----
+Roblox のゲーム開発で使う画像・音声・3Dモデルを、ブラウザから一括アップロードできるWebアプリ。
 
-## すぐに使う（はじめての方へ）
+## 機能
 
-### このアプリでできること
+- **Roblox OAuth ログイン** — Robloxアカウントでログインするだけで使い始められる
+- **ドラッグ＆ドロップ一括アップロード** — ファイル・フォルダをD&Dで投入、3並列でアップロード
+- **プロジェクト管理** — ゲームごとにアセットを分けて管理
+- **ロックファイル** — ファイル名↔アセットIDの対応をDB管理、再アップロード時はIDを維持して上書き
+- **Luauコード生成** — `Assets.lua` モジュールを自動生成、名前でアセット参照可能に
+- **グループ対応** — グループのOpen Cloud APIキーを暗号化保存してグループアセットもアップロード
+- **Studio連携** — プラグイン経由でStudioにModuleScriptを差し込み
+- **エクスポート** — CSV / TSV / Markdown / TOML 形式でアセット一覧を出力
 
-Roblox のゲーム開発で使う画像・音声・3Dモデルを、**ドラッグ＆ドロップ**で一括アップロードできます。  
-アップロード後は、ゲーム内のスクリプトから「ファイル名」でアセットを参照できるコードが自動生成されます。
+## 技術スタック
 
-### 必要なもの
+| レイヤー | 技術 |
+|---------|------|
+| フレームワーク | Next.js 15 (App Router) + TypeScript |
+| 認証 | NextAuth.js v5 + Roblox OAuth 2.0 |
+| DB | Prisma + SQLite (dev) / Vercel Postgres (prod) |
+| UI | React + Tailwind CSS |
+| ホスティング | Vercel |
+| Studio連携 | Luau プラグイン ↔ API Routes |
 
-- **Roblox Open Cloud API キー**（[Roblox Creator Hub](https://create.roblox.com/) で取得）
-- **macOS** または **Windows**
-
-### 使い方
-
-1. **アプリをダウンロード**  
-   [Releases](https://github.com/shinjiesk/rbx-asset-uploader/releases) から `.dmg`（Mac）または `.exe`（Windows）をダウンロードしてインストール
-
-   **Mac で「壊れているため開けません」と出る場合**  
-   ダウンロードしたアプリに macOS の隔離属性が付いているためです。ターミナルで以下を実行してください：
-   ```bash
-   xattr -cr /Applications/Roblox\ Asset\ Uploader.app
-   ```
-   （アプリを別の場所に置いた場合は、そのパスに置き換えてください）
-
-2. **初回設定**
-   - アプリを起動
-   - 設定画面で API キーを入力して保存
-   - クリエイタープロファイル（Group ID または User ID）を追加
-
-3. **アップロード**
-   - プロジェクトフォルダを選択
-   - 画像（.png, .jpeg）・音声（.mp3, .ogg など）・モデル（.fbx）をドラッグ＆ドロップ
-   - プレビューで内容を確認して「アップロード」をクリック
-
-4. **Roblox Studio に反映する場合**
-   - `studio-plugin/` 内のプラグインを Studio にインストール
-   - アプリと Studio を両方起動しておくと、アップロード完了時に自動で Studio に反映されます
-
-### サポートするファイル形式
-
-| 種類 | 拡張子 |
-|------|--------|
-| 画像 | .png, .jpeg |
-| 音声 | .mp3, .ogg, .flac, .wav |
-| 3Dモデル | .fbx |
-
----
-
-## Technical Documentation
-
-### Features
-
-- **Drag & drop** file and folder upload with recursive scanning
-- **Bulk upload** with 3-parallel concurrency, per-file progress and retry
-- **Lock file** (`assets.lock.toml`) tracks filename → asset ID mappings
-- **Luau codegen** generates `Assets.lua` so game scripts reference assets by name
-- **Update support** — re-uploading a file PATCHes the existing asset (ID stays the same)
-- **API key security** — stored in OS keychain (macOS Keychain / Windows Credential Manager)
-- **Creator profiles** — switch between Group/User IDs via dropdown
-- **Studio bridge** — pushes the Assets module directly into a running Roblox Studio instance
-
-### Tech Stack
-
-| Layer | Technology |
-|-------|-------------|
-| Framework | Tauri v2 (Rust + HTML/CSS/JS) |
-| HTTP client | reqwest (multipart, retry, backoff) |
-| Keychain | keyring crate |
-| Studio bridge | axum HTTP server ↔ Studio Luau plugin |
-| Frontend | Vanilla HTML / CSS / JavaScript |
-
-### Prerequisites
-
-- [Rust](https://rustup.rs/) (stable)
-- [Node.js](https://nodejs.org/) ≥ 18
-- Platform build tools for Tauri — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
-
-### Development
+## 開発
 
 ```bash
+# 依存関係インストール
 npm install
-npm run tauri dev
+
+# DBマイグレーション
+npx prisma migrate dev
+
+# 開発サーバー起動
+npm run dev
 ```
 
-### Build
+ブラウザで http://localhost:3000 を開く。
+
+### 環境変数
+
+`.env.local.example` をコピーして `.env.local` を作成:
 
 ```bash
-npm run tauri build
+cp .env.local.example .env.local
 ```
 
-Outputs: `.dmg` (macOS) / `.exe` + `.msi` (Windows)
+| 変数 | 説明 |
+|------|------|
+| `NEXTAUTH_URL` | アプリのURL (dev: `http://localhost:3000`) |
+| `NEXTAUTH_SECRET` | セッション暗号化キー |
+| `ROBLOX_CLIENT_ID` | Roblox OAuth アプリのClient ID (空ならdev mock有効) |
+| `ROBLOX_CLIENT_SECRET` | Roblox OAuth アプリのClient Secret |
+| `ENCRYPTION_KEY` | トークン・APIキー暗号化用 32バイトhex (64文字) |
+| `DATABASE_URL` | DB接続URL (dev: `file:./prisma/dev.db`) |
 
-### Studio Plugin
+### Studio プラグイン
 
-Copy `studio-plugin/AssetUploaderBridge.server.lua` into your Roblox Studio plugins folder, or install it as an `.rbxm` model.
+`studio-plugin/AssetUploaderBridge.server.lua` を Roblox Studio のプラグインフォルダにコピー。
 
-The plugin automatically registers with the desktop app and polls for commands. Click the **Bridge** toolbar button to toggle the connection.
-
-### Project Structure
+## プロジェクト構成
 
 ```
-src/                  Frontend (HTML/CSS/JS)
-src-tauri/            Rust backend
-  src/
-    api/              Roblox Open Cloud API client
-    commands.rs       Tauri commands (frontend ↔ backend)
-    keystore.rs       OS keychain (keyring)
-    lockfile.rs       assets.lock.toml reader/writer
-    codegen.rs        Assets.lua generator
-    upload.rs         Parallel upload orchestration
-    server.rs         axum HTTP server for Studio bridge
-studio-plugin/        Roblox Studio Luau plugin
-docs/                 Specification
+app/                    Next.js App Router
+  page.tsx              メイン画面
+  login/page.tsx        ログイン画面
+  settings/page.tsx     設定画面
+  api/                  API Routes (16 endpoints)
+components/             React コンポーネント
+lib/                    サーバーサイドライブラリ
+  auth.ts               NextAuth 設定 + Roblox OAuth
+  roblox-api.ts         Roblox API クライアント (リトライ付き)
+  crypto.ts             AES-256-GCM 暗号化
+  codegen.ts            Assets.lua / TOML 生成
+  db.ts                 Prisma Client
+prisma/                 DBスキーマ + マイグレーション
+studio-plugin/          Roblox Studio Luau プラグイン
+docs/                   仕様書
 ```
