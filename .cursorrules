@@ -1,13 +1,19 @@
 # rbx-asset-uploader
 
-## 検証・デバッグ
-
-- 変更後は必ず `npm run verify` で起動確認する
-- 失敗時は `RUST_BACKTRACE=1 npm run verify` または `bash scripts/debug.sh` でパニック原因を特定
-- ログ: `.verify.log`, `.debug.log`
-
 ## 構成
 
-- Tauri v2 + Vanilla JS
-- Rust: src-tauri/src/
-- HTTP サーバー: axum, port 58750
+- Next.js 15 (App Router) + TypeScript
+- 認証: NextAuth.js v5 (Auth.js) + Roblox OAuth 2.0
+- DB: Prisma + SQLite (dev) / Vercel Postgres (prod)
+- UI: React + Tailwind CSS
+- ホスティング: Vercel
+
+## 検証
+
+- `npm run dev` で開発サーバー起動
+- `npm run build` でビルド確認
+- `npm run lint` でリント
+
+## スペック
+
+- 詳細仕様: docs/spec.md

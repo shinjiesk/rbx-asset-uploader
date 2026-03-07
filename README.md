@@ -19,6 +19,13 @@ Roblox のゲーム開発で使う画像・音声・3Dモデルを、**ドラッ
 1. **アプリをダウンロード**  
    [Releases](https://github.com/shinjiesk/rbx-asset-uploader/releases) から `.dmg`（Mac）または `.exe`（Windows）をダウンロードしてインストール
 
+   **Mac で「壊れているため開けません」と出る場合**  
+   ダウンロードしたアプリに macOS の隔離属性が付いているためです。ターミナルで以下を実行してください：
+   ```bash
+   xattr -cr /Applications/Roblox\ Asset\ Uploader.app
+   ```
+   （アプリを別の場所に置いた場合は、そのパスに置き換えてください）
+
 2. **初回設定**
    - アプリを起動
    - 設定画面で API キーを入力して保存
