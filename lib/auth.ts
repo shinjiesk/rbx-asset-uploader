@@ -14,18 +14,14 @@ function robloxProvider() {
       params: {
         scope: "openid profile asset:read asset:write",
         response_type: "code",
-        code_challenge_method: "S256",
       },
     },
-    token: {
-      url: "https://apis.roblox.com/oauth/v1/token",
+    token: "https://apis.roblox.com/oauth/v1/token",
+    userinfo: "https://apis.roblox.com/oauth/v1/userinfo",
+    checks: ["state" as const],
+    client: {
+      token_endpoint_auth_method: "client_secret_post",
     },
-    userinfo: {
-      url: "https://apis.roblox.com/oauth/v1/userinfo",
-    },
-    checks: ["pkce" as const, "state" as const],
-    idToken: true,
-    jwks_endpoint: "https://apis.roblox.com/oauth/v1/certs",
     profile(profile: Record<string, unknown>) {
       return {
         id: profile.sub as string,
@@ -72,7 +68,9 @@ const authConfig: NextAuthConfig = {
   providers: buildProviders(),
   pages: {
     signIn: "/login",
+    error: "/login",
   },
+  debug: process.env.NODE_ENV === "development",
   callbacks: {
     async jwt({ token, account, profile }) {
       if (account) {

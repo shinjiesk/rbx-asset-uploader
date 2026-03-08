@@ -1,12 +1,22 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
 
-export default function LoginPage() {
+const ERROR_MESSAGES: Record<string, string> = {
+  Configuration: "サーバー設定エラーが発生しました。管理者に連絡してください。",
+  OAuthSignin: "OAuth認証の開始に失敗しました。",
+  OAuthCallback: "OAuth認証のコールバックでエラーが発生しました。",
+  OAuthAccountNotLinked: "このアカウントは別のログイン方法で登録されています。",
+  Default: "ログインに失敗しました。もう一度お試しください。",
+};
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const error = searchParams.get("error");
 
   async function handleDevLogin() {
     setLoading(true);
@@ -31,6 +41,13 @@ export default function LoginPage() {
           ログインしてアセットを管理
         </p>
 
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+            {ERROR_MESSAGES[error] || ERROR_MESSAGES.Default}
+            <p className="mt-1 text-xs text-red-400">Error: {error}</p>
+          </div>
+        )}
+
         <div className="space-y-3">
           <button
             onClick={() => signIn("roblox", { callbackUrl: "/" })}
@@ -51,5 +68,13 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   );
 }
