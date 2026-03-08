@@ -9,6 +9,7 @@ function robloxProvider() {
     type: "oauth" as const,
     clientId: process.env.ROBLOX_CLIENT_ID!,
     clientSecret: process.env.ROBLOX_CLIENT_SECRET!,
+    issuer: "https://apis.roblox.com/oauth/",
     authorization: {
       url: "https://apis.roblox.com/oauth/v1/authorize",
       params: {
@@ -16,8 +17,25 @@ function robloxProvider() {
         response_type: "code",
       },
     },
-    token: "https://apis.roblox.com/oauth/v1/token",
-    userinfo: "https://apis.roblox.com/oauth/v1/userinfo",
+    token: {
+      url: "https://apis.roblox.com/oauth/v1/token",
+      conform: async (response: Response) => {
+        // Roblox returns id_token even for OAuth (non-OIDC) flows.
+        // Strip it to prevent oauth4webapi from attempting JWKS validation
+        // against the authorization server metadata (which lacks jwks_uri
+        // when explicit endpoints are used).
+        const body = await response.json();
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id_token, ...rest } = body as Record<string, unknown>;
+        return new Response(JSON.stringify(rest), {
+          status: response.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    userinfo: {
+      url: "https://apis.roblox.com/oauth/v1/userinfo",
+    },
     checks: ["state" as const],
     client: {
       token_endpoint_auth_method: "client_secret_post",
@@ -70,7 +88,6 @@ const authConfig: NextAuthConfig = {
     signIn: "/login",
     error: "/login",
   },
-  debug: process.env.NODE_ENV === "development",
   callbacks: {
     async jwt({ token, account, profile }) {
       if (account) {
