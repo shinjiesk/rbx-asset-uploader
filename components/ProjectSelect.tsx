@@ -7,7 +7,8 @@ export interface Project {
   name: string;
   creatorType: string;
   groupProfileId?: string | null;
-  _count?: { assetEntries: number; places: number };
+  placesCount?: number;
+  assetEntriesCount?: number;
 }
 
 interface ProjectSelectProps {

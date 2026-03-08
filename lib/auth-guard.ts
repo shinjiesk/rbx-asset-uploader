@@ -8,8 +8,14 @@ export async function getAuthenticatedUser() {
     return null;
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await prisma.user.upsert({
     where: { robloxUserId: session.user.id },
+    create: {
+      robloxUserId: session.user.id,
+      robloxUsername: session.user.name,
+      robloxAvatarUrl: session.user.image,
+    },
+    update: {},
   });
 
   return user;

@@ -23,7 +23,8 @@ interface ProjectItem {
   name: string;
   creatorType: string;
   groupProfileId: string | null;
-  _count: { assetEntries: number; places: number };
+  placesCount: number;
+  assetEntriesCount: number;
 }
 
 export default function SettingsPage() {
@@ -279,8 +280,8 @@ export default function SettingsPage() {
                       <p className="font-medium">{proj.name}</p>
                       <p className="text-sm text-gray-500">
                         {proj.creatorType === "user" ? "個人" : "グループ"} ·
-                        アセット {proj._count.assetEntries} 件 · プレイス{" "}
-                        {proj._count.places} 件
+                        アセット {proj.assetEntriesCount} 件 · プレイス{" "}
+                        {proj.placesCount} 件
                       </p>
                     </div>
                     <div className="flex gap-2">
