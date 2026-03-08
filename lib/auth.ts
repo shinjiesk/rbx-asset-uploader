@@ -6,8 +6,7 @@ function robloxProvider() {
   return {
     id: "roblox",
     name: "Roblox",
-    type: "oidc" as const,
-    issuer: "https://apis.roblox.com/oauth/",
+    type: "oauth" as const,
     clientId: process.env.ROBLOX_CLIENT_ID!,
     clientSecret: process.env.ROBLOX_CLIENT_SECRET!,
     authorization: {
@@ -15,11 +14,18 @@ function robloxProvider() {
       params: {
         scope: "openid profile asset:read asset:write",
         response_type: "code",
+        code_challenge_method: "S256",
       },
     },
-    token: "https://apis.roblox.com/oauth/v1/token",
-    userinfo: "https://apis.roblox.com/oauth/v1/userinfo",
+    token: {
+      url: "https://apis.roblox.com/oauth/v1/token",
+    },
+    userinfo: {
+      url: "https://apis.roblox.com/oauth/v1/userinfo",
+    },
     checks: ["pkce" as const, "state" as const],
+    idToken: true,
+    jwks_endpoint: "https://apis.roblox.com/oauth/v1/certs",
     profile(profile: Record<string, unknown>) {
       return {
         id: profile.sub as string,
