@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser, unauthorizedResponse } from "@/lib/auth-guard";
+import { getAuthenticatedUser, getAccessToken, unauthorizedResponse } from "@/lib/auth-guard";
 import { prisma } from "@/lib/db";
-import {
-  updateAsset,
-  makeAuthHeaders,
-  RobloxApiError,
-} from "@/lib/roblox-api";
 import { getAssetTypeInfo } from "@/lib/asset-types";
 import { decrypt } from "@/lib/crypto";
 
@@ -37,32 +32,10 @@ export async function POST(request: Request) {
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, userId: user.id },
-      include: { groupProfile: true },
     });
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
-
-    let authHeaders: ReturnType<typeof makeAuthHeaders>;
-
-    if (project.creatorType === "user") {
-      if (!user.accessToken) {
-        return NextResponse.json(
-          { error: "OAuth token not available. Please re-login." },
-          { status: 400 }
-        );
-      }
-      authHeaders = makeAuthHeaders("oauth", user.accessToken);
-    } else {
-      if (!project.groupProfile) {
-        return NextResponse.json(
-          { error: "Group profile not found for this project" },
-          { status: 400 }
-        );
-      }
-      const apiKey = decrypt(project.groupProfile.apiKey);
-      authHeaders = makeAuthHeaders("api_key", apiKey);
     }
 
     const filename = file.name;
@@ -74,22 +47,87 @@ export async function POST(request: Request) {
       );
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await updateAsset(assetId, buffer, filename, typeInfo.apiType, authHeaders);
+    let authHeader: Record<string, string>;
+
+    if (project.creatorType === "user") {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        return NextResponse.json(
+          { error: "OAuth token not available. Please re-login." },
+          { status: 400 }
+        );
+      }
+      authHeader = { Authorization: `Bearer ${accessToken}` };
+    } else {
+      if (!user.apiKey) {
+        return NextResponse.json(
+          { error: "API キーが設定されていません。設定ページで登録してください。" },
+          { status: 400 }
+        );
+      }
+      const apiKey = decrypt(user.apiKey);
+      authHeader = { "x-api-key": apiKey };
+    }
+
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
+
+    const requestJson = JSON.stringify({ assetType: typeInfo.apiType });
+
+    const boundary = `----FormBoundary${Date.now()}`;
+    const parts: Buffer[] = [];
+
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="request"\r\n` +
+      `Content-Type: application/json\r\n\r\n` +
+      `${requestJson}\r\n`
+    ));
+
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="fileContent"; filename="${filename}"\r\n` +
+      `Content-Type: ${typeInfo.contentType}\r\n\r\n`
+    ));
+    parts.push(Buffer.from(fileBytes));
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+    const bodyBuffer = Buffer.concat(parts);
+
+    const resp = await fetch(
+      `https://apis.roblox.com/assets/v1/assets/${assetId}`,
+      {
+        method: "PATCH",
+        headers: {
+          ...authHeader,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body: bodyBuffer,
+      }
+    );
+
+    if (!resp.ok) {
+      const respText = await resp.text();
+      let errorMsg: string;
+      try {
+        const errJson = JSON.parse(respText);
+        errorMsg = errJson.message || errJson.errors?.[0]?.message || respText;
+      } catch {
+        errorMsg = respText;
+      }
+
+      if (resp.status === 401 && errorMsg.toLowerCase().includes("invalid api key")) {
+        return NextResponse.json(
+          { error: "API キーが無効です。設定ページで正しいキーを再登録してください。" },
+          { status: 401 }
+        );
+      }
+
+      const status = resp.status === 401 || resp.status === 403 ? 401 : resp.status >= 500 ? 502 : 400;
+      return NextResponse.json({ error: errorMsg }, { status });
+    }
 
     return NextResponse.json({ assetId, filename });
   } catch (e) {
-    if (e instanceof RobloxApiError) {
-      const status =
-        e.code === "auth" ? 401 : e.code === "validation" ? 400 : 502;
-      return NextResponse.json({ error: e.message }, { status });
-    }
-    if (e instanceof Error && e.message.includes("Invalid encrypted format")) {
-      return NextResponse.json(
-        { error: "Invalid API key configuration" },
-        { status: 500 }
-      );
-    }
     console.error("Update error:", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Update failed" },

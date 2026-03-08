@@ -22,7 +22,8 @@ export async function GET() {
       id: p.id,
       name: p.name,
       creatorType: p.creatorType as "user" | "group",
-      groupProfileId: p.groupProfileId,
+      groupId: p.groupId,
+      groupName: p.groupName,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       placesCount: p._count.places,
@@ -45,10 +46,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, creatorType, groupProfileId } = body as {
+    const { name, creatorType, groupId, groupName } = body as {
       name?: string;
       creatorType?: "user" | "group";
-      groupProfileId?: string;
+      groupId?: string;
+      groupName?: string;
     };
 
     if (!name || typeof name !== "string" || name.trim() === "") {
@@ -65,26 +67,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const effectiveGroupProfileId =
-      creatorType === "group" ? groupProfileId ?? null : null;
-
-    if (creatorType === "group" && !effectiveGroupProfileId) {
+    if (creatorType === "group" && !groupId) {
       return NextResponse.json(
-        { error: "groupProfileId is required when creatorType is 'group'" },
+        { error: "groupId is required when creatorType is 'group'" },
         { status: 400 }
       );
-    }
-
-    if (effectiveGroupProfileId) {
-      const gp = await prisma.groupProfile.findFirst({
-        where: { id: effectiveGroupProfileId, userId: user.id },
-      });
-      if (!gp) {
-        return NextResponse.json(
-          { error: "Group profile not found or access denied" },
-          { status: 404 }
-        );
-      }
     }
 
     const project = await prisma.project.create({
@@ -92,7 +79,8 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         name: name.trim(),
         creatorType,
-        groupProfileId: effectiveGroupProfileId,
+        groupId: creatorType === "group" ? groupId : null,
+        groupName: creatorType === "group" ? (groupName ?? null) : null,
       },
     });
 
@@ -112,11 +100,9 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { id, name, creatorType, groupProfileId } = body as {
+    const { id, name } = body as {
       id?: string;
       name?: string;
-      creatorType?: "user" | "group";
-      groupProfileId?: string;
     };
 
     if (!id || typeof id !== "string") {
@@ -137,56 +123,16 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updates: {
-      name?: string;
-      creatorType?: string;
-      groupProfileId?: string | null;
-    } = {};
-
-    if (name !== undefined) {
-      if (typeof name !== "string" || name.trim() === "") {
-        return NextResponse.json(
-          { error: "name must be non-empty when provided" },
-          { status: 400 }
-        );
-      }
-      updates.name = name.trim();
-    }
-
-    if (creatorType !== undefined) {
-      if (!["user", "group"].includes(creatorType)) {
-        return NextResponse.json(
-          { error: "creatorType must be 'user' or 'group'" },
-          { status: 400 }
-        );
-      }
-      updates.creatorType = creatorType;
-      updates.groupProfileId =
-        creatorType === "group" ? groupProfileId ?? null : null;
-
-      if (creatorType === "group" && !updates.groupProfileId) {
-        return NextResponse.json(
-          { error: "groupProfileId is required when creatorType is 'group'" },
-          { status: 400 }
-        );
-      }
-
-      if (updates.groupProfileId) {
-        const gp = await prisma.groupProfile.findFirst({
-          where: { id: updates.groupProfileId, userId: user.id },
-        });
-        if (!gp) {
-          return NextResponse.json(
-            { error: "Group profile not found or access denied" },
-            { status: 404 }
-          );
-        }
-      }
+    if (!name || typeof name !== "string" || name.trim() === "") {
+      return NextResponse.json(
+        { error: "name must be non-empty" },
+        { status: 400 }
+      );
     }
 
     const updated = await prisma.project.update({
       where: { id },
-      data: updates,
+      data: { name: name.trim() },
     });
 
     return NextResponse.json(updated);

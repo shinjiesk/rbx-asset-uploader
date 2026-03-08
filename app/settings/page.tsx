@@ -4,25 +4,12 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 
-interface GroupProfile {
-  id: string;
-  groupId: string;
-  groupName: string;
-  roleName: string | null;
-  createdAt: string;
-}
-
-interface RobloxGroup {
-  groupId: number;
-  groupName: string;
-  roleName: string;
-}
-
 interface ProjectItem {
   id: string;
   name: string;
   creatorType: string;
-  groupProfileId: string | null;
+  groupId: string | null;
+  groupName: string | null;
   placesCount: number;
   assetEntriesCount: number;
 }
@@ -31,15 +18,14 @@ export default function SettingsPage() {
   const { status } = useSession();
   const router = useRouter();
 
-  const [groupProfiles, setGroupProfiles] = useState<GroupProfile[]>([]);
-  const [robloxGroups, setRobloxGroups] = useState<RobloxGroup[]>([]);
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
-
-  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [keyPreview, setKeyPreview] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
@@ -47,14 +33,13 @@ export default function SettingsPage() {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
-  const fetchGroupProfiles = useCallback(async () => {
-    const res = await fetch("/api/group-profiles");
-    if (res.ok) setGroupProfiles(await res.json());
-  }, []);
-
-  const fetchRobloxGroups = useCallback(async () => {
-    const res = await fetch("/api/groups");
-    if (res.ok) setRobloxGroups(await res.json());
+  const fetchApiKeyStatus = useCallback(async () => {
+    const res = await fetch("/api/user-apikey");
+    if (res.ok) {
+      const data = await res.json();
+      setHasApiKey(data.hasApiKey);
+      setKeyPreview(data.keyPreview ?? null);
+    }
   }, []);
 
   const fetchProjects = useCallback(async () => {
@@ -64,47 +49,39 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetchGroupProfiles();
-      fetchRobloxGroups();
+      fetchApiKeyStatus();
       fetchProjects();
     }
-  }, [status, fetchGroupProfiles, fetchRobloxGroups, fetchProjects]);
+  }, [status, fetchApiKeyStatus, fetchProjects]);
 
-  async function handleAddGroupProfile() {
-    if (!selectedGroupId || !apiKeyInput.trim()) return;
-    const group = robloxGroups.find(
-      (g) => g.groupId.toString() === selectedGroupId
-    );
-    if (!group) return;
-
+  async function handleSaveApiKey() {
+    if (!apiKeyInput.trim()) return;
     setSaving(true);
-    const res = await fetch("/api/group-profiles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        groupId: group.groupId.toString(),
-        groupName: group.groupName,
-        roleName: group.roleName,
-        apiKey: apiKeyInput.trim(),
-      }),
-    });
-    setSaving(false);
-
-    if (res.ok) {
-      setSelectedGroupId("");
-      setApiKeyInput("");
-      await fetchGroupProfiles();
+    setError(null);
+    try {
+      const res = await fetch("/api/user-apikey", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
+      });
+      if (res.ok) {
+        setApiKeyInput("");
+        setHasApiKey(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(`保存に失敗しました: ${data.error || "Unknown error"}`);
+      }
+    } catch (e) {
+      setError(`ネットワークエラー: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleDeleteGroupProfile(id: string) {
-    if (!confirm("このグループプロファイルを削除しますか？")) return;
-    await fetch("/api/group-profiles", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    await fetchGroupProfiles();
+  async function handleDeleteApiKey() {
+    if (!confirm("API キーを削除しますか？グループへのアップロードができなくなります。")) return;
+    await fetch("/api/user-apikey", { method: "DELETE" });
+    setHasApiKey(false);
   }
 
   async function handleDeleteProject(id: string, name: string) {
@@ -133,10 +110,6 @@ export default function SettingsPage() {
     await fetchProjects();
   }
 
-  const availableGroups = robloxGroups.filter(
-    (g) => !groupProfiles.some((gp) => gp.groupId === g.groupId.toString())
-  );
-
   if (status === "loading") {
     return (
       <main className="flex min-h-screen items-center justify-center">
@@ -157,62 +130,52 @@ export default function SettingsPage() {
         </button>
       </header>
 
-      {/* Group Profiles */}
+      {/* API Key */}
       <section className="mb-10">
-        <h2 className="mb-4 text-lg font-semibold">グループプロファイル</h2>
+        <h2 className="mb-4 text-lg font-semibold">Open Cloud API キー</h2>
         <p className="mb-4 text-sm text-gray-500">
-          グループのアセットをアップロードするには、グループオーナーが発行した
-          Open Cloud API キーが必要です。
+          グループのアセットをアップロードするには、Roblox Creator Hub
+          で作成したユーザー API キー（asset:read + asset:write）が必要です。
+          個人アセットのアップロードには不要です。
         </p>
 
-        {groupProfiles.length > 0 && (
-          <div className="mb-6 space-y-2">
-            {groupProfiles.map((gp) => (
-              <div
-                key={gp.id}
-                className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3"
+        {hasApiKey ? (
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
+            <div>
+              <p className="font-medium">API キー登録済み</p>
+              <p className="text-sm text-gray-500">
+                {keyPreview ? (
+                  <>キー: <code className="rounded bg-gray-100 px-1 font-mono text-xs">{keyPreview}</code></>
+                ) : (
+                  "グループへのアセットアップロードが有効です"
+                )}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setHasApiKey(false)}
+                className="text-sm text-blue-600 hover:text-blue-800"
               >
-                <div>
-                  <p className="font-medium">{gp.groupName}</p>
-                  <p className="text-sm text-gray-500">
-                    {gp.roleName && `ロール: ${gp.roleName} · `}
-                    ID: {gp.groupId}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDeleteGroupProfile(gp.id)}
-                  className="text-sm text-red-500 hover:text-red-700"
-                >
-                  削除
-                </button>
-              </div>
-            ))}
+                変更
+              </button>
+              <button
+                onClick={handleDeleteApiKey}
+                className="text-sm text-red-500 hover:text-red-700"
+              >
+                削除
+              </button>
+            </div>
           </div>
-        )}
-
-        {availableGroups.length > 0 ? (
+        ) : (
           <div className="rounded-lg border border-gray-200 p-4">
-            <h3 className="mb-3 text-sm font-medium">グループを追加</h3>
-            <div className="space-y-3">
-              <select
-                value={selectedGroupId}
-                onChange={(e) => setSelectedGroupId(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">-- グループを選択 --</option>
-                {availableGroups.map((g) => (
-                  <option key={g.groupId} value={g.groupId}>
-                    {g.groupName} ({g.roleName})
-                  </option>
-                ))}
-              </select>
-              <div className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
                 <input
                   type={showApiKey ? "text" : "password"}
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="API キー"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-16 text-sm"
+                  placeholder="API キーを貼り付け"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-16 text-sm font-mono"
                 />
                 <button
                   onClick={() => setShowApiKey(!showApiKey)}
@@ -221,21 +184,26 @@ export default function SettingsPage() {
                   {showApiKey ? "隠す" : "表示"}
                 </button>
               </div>
-              <button
-                onClick={handleAddGroupProfile}
-                disabled={!selectedGroupId || !apiKeyInput.trim() || saving}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              <a
+                href="https://create.roblox.com/dashboard/credentials"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm text-blue-600 hover:bg-gray-50"
               >
-                {saving ? "保存中..." : "追加"}
-              </button>
+                API キー作成ページを開く ↗
+              </a>
             </div>
+            {error && (
+              <p className="mt-2 text-sm text-red-600">{error}</p>
+            )}
+            <button
+              onClick={handleSaveApiKey}
+              disabled={!apiKeyInput.trim() || saving}
+              className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? "保存中..." : "保存"}
+            </button>
           </div>
-        ) : (
-          <p className="text-sm text-gray-400">
-            {robloxGroups.length === 0
-              ? "所属グループがありません"
-              : "すべてのグループが登録済みです"}
-          </p>
         )}
       </section>
 
@@ -279,8 +247,10 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-medium">{proj.name}</p>
                       <p className="text-sm text-gray-500">
-                        {proj.creatorType === "user" ? "個人" : "グループ"} ·
-                        アセット {proj.assetEntriesCount} 件 · プレイス{" "}
+                        {proj.creatorType === "user"
+                          ? "個人"
+                          : proj.groupName ?? `グループ ${proj.groupId}`}{" "}
+                        · アセット {proj.assetEntriesCount} 件 · プレイス{" "}
                         {proj.placesCount} 件
                       </p>
                     </div>

@@ -71,9 +71,6 @@ export default function Home() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null
   );
-  const [groupProfiles, setGroupProfiles] = useState<
-    Array<{ id: string; groupName: string }>
-  >([]);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [existingAssets, setExistingAssets] = useState<
@@ -91,17 +88,11 @@ export default function Home() {
     if (res.ok) setProjects(await res.json());
   }, []);
 
-  const fetchGroupProfiles = useCallback(async () => {
-    const res = await fetch("/api/group-profiles");
-    if (res.ok) setGroupProfiles(await res.json());
-  }, []);
-
   useEffect(() => {
     if (status === "authenticated") {
       fetchProjects();
-      fetchGroupProfiles();
     }
-  }, [status, fetchProjects, fetchGroupProfiles]);
+  }, [status, fetchProjects]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -236,7 +227,8 @@ export default function Home() {
   async function handleCreateProject(data: {
     name: string;
     creatorType: string;
-    groupProfileId?: string;
+    groupId?: string;
+    groupName?: string;
   }) {
     const res = await fetch("/api/projects", {
       method: "POST",
@@ -275,6 +267,12 @@ export default function Home() {
           )}
           <span className="text-sm text-gray-600">{session?.user?.name}</span>
           <button
+            onClick={() => router.push("/experiment")}
+            className="rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-sm text-orange-700 hover:bg-orange-100"
+          >
+            実験
+          </button>
+          <button
             onClick={() => router.push("/settings")}
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100"
           >
@@ -296,7 +294,6 @@ export default function Home() {
           selectedId={selectedProjectId}
           onSelect={setSelectedProjectId}
           onCreate={handleCreateProject}
-          groupProfiles={groupProfiles}
         />
       </div>
 

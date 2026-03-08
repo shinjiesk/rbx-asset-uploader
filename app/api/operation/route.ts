@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedUser, unauthorizedResponse } from "@/lib/auth-guard";
+import { getAuthenticatedUser, getAccessToken, unauthorizedResponse } from "@/lib/auth-guard";
 import { prisma } from "@/lib/db";
 import { getOperation, makeAuthHeaders, RobloxApiError } from "@/lib/roblox-api";
 import { decrypt } from "@/lib/crypto";
@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, userId: user.id },
-      include: { groupProfile: true },
     });
 
     if (!project) {
@@ -32,21 +31,22 @@ export async function GET(request: NextRequest) {
     let authHeaders: ReturnType<typeof makeAuthHeaders>;
 
     if (project.creatorType === "user") {
-      if (!user.accessToken) {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
         return NextResponse.json(
           { error: "OAuth token not available. Please re-login." },
           { status: 400 }
         );
       }
-      authHeaders = makeAuthHeaders("oauth", user.accessToken);
+      authHeaders = makeAuthHeaders("oauth", accessToken);
     } else {
-      if (!project.groupProfile) {
+      if (!user.apiKey) {
         return NextResponse.json(
-          { error: "Group profile not found for this project" },
+          { error: "API キーが設定されていません。設定ページで登録してください。" },
           { status: 400 }
         );
       }
-      const apiKey = decrypt(project.groupProfile.apiKey);
+      const apiKey = decrypt(user.apiKey);
       authHeaders = makeAuthHeaders("api_key", apiKey);
     }
 

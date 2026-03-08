@@ -12,13 +12,21 @@ export async function getAuthenticatedUser() {
     where: { robloxUserId: session.user.id },
     create: {
       robloxUserId: session.user.id,
-      robloxUsername: session.user.name,
-      robloxAvatarUrl: session.user.image,
+      robloxUsername: session.user.name ?? null,
+      robloxAvatarUrl: session.user.image ?? null,
     },
-    update: {},
+    update: {
+      robloxUsername: session.user.name ?? undefined,
+      robloxAvatarUrl: session.user.image ?? undefined,
+    },
   });
 
   return user;
+}
+
+export async function getAccessToken(): Promise<string | null> {
+  const session = await auth();
+  return ((session as unknown as Record<string, unknown>)?.accessToken as string) ?? null;
 }
 
 export function unauthorizedResponse() {

@@ -5,17 +5,19 @@ export type AssetApiType = "Decal" | "Audio" | "Model";
 interface AssetTypeInfo {
   category: AssetCategory;
   apiType: AssetApiType;
+  contentType: string;
 }
 
 const EXTENSION_MAP: Record<string, AssetTypeInfo> = {
-  png: { category: "Image", apiType: "Decal" },
-  jpeg: { category: "Image", apiType: "Decal" },
-  jpg: { category: "Image", apiType: "Decal" },
-  mp3: { category: "Audio", apiType: "Audio" },
-  ogg: { category: "Audio", apiType: "Audio" },
-  flac: { category: "Audio", apiType: "Audio" },
-  wav: { category: "Audio", apiType: "Audio" },
-  fbx: { category: "Model", apiType: "Model" },
+  png: { category: "Image", apiType: "Decal", contentType: "image/png" },
+  jpeg: { category: "Image", apiType: "Decal", contentType: "image/jpeg" },
+  jpg: { category: "Image", apiType: "Decal", contentType: "image/jpeg" },
+  bmp: { category: "Image", apiType: "Decal", contentType: "image/bmp" },
+  mp3: { category: "Audio", apiType: "Audio", contentType: "audio/mpeg" },
+  ogg: { category: "Audio", apiType: "Audio", contentType: "audio/ogg" },
+  flac: { category: "Audio", apiType: "Audio", contentType: "audio/flac" },
+  wav: { category: "Audio", apiType: "Audio", contentType: "audio/wav" },
+  fbx: { category: "Model", apiType: "Model", contentType: "model/fbx" },
 };
 
 export function getAssetTypeInfo(filename: string): AssetTypeInfo | null {

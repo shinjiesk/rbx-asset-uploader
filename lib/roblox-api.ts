@@ -130,6 +130,34 @@ async function pollOperation(
   throw new RobloxApiError("operation_timeout", "Operation polling timed out");
 }
 
+function buildMultipartBody(
+  requestJson: string,
+  fileBytes: Uint8Array,
+  filename: string,
+  contentType: string
+): { payload: BodyInit; boundary: string } {
+  const boundary = `----FormBoundary${Date.now()}${Math.random().toString(36).slice(2)}`;
+  const parts: Buffer[] = [];
+
+  parts.push(Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="request"\r\n` +
+    `Content-Type: application/json\r\n\r\n` +
+    `${requestJson}\r\n`
+  ));
+
+  parts.push(Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="fileContent"; filename="${filename}"\r\n` +
+    `Content-Type: ${contentType}\r\n\r\n`
+  ));
+  parts.push(Buffer.from(fileBytes));
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+  const buf = Buffer.concat(parts);
+  return { payload: buf as unknown as BodyInit, boundary };
+}
+
 export async function createAsset(
   file: Uint8Array,
   filename: string,
@@ -152,23 +180,19 @@ export async function createAsset(
       creationContext: { creator },
     });
 
-    const formData = new FormData();
-    formData.append(
-      "request",
-      new Blob([requestJson], { type: "application/json" })
-    );
-    formData.append(
-      "fileContent",
-      new Blob([new Uint8Array(file)], { type: "application/octet-stream" }),
-      filename
+    const { payload, boundary } = buildMultipartBody(
+      requestJson, file, filename, "application/octet-stream"
     );
 
     let resp: Response;
     try {
       resp = await fetch(`${BASE_URL}/assets`, {
         method: "POST",
-        headers: authHeaders as Record<string, string>,
-        body: formData,
+        headers: {
+          ...(authHeaders as Record<string, string>),
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body: payload,
       });
     } catch (e) {
       throw new RobloxApiError(
@@ -206,23 +230,19 @@ export async function updateAsset(
   return executeWithRetry(async () => {
     const requestJson = JSON.stringify({ assetType });
 
-    const formData = new FormData();
-    formData.append(
-      "request",
-      new Blob([requestJson], { type: "application/json" })
-    );
-    formData.append(
-      "fileContent",
-      new Blob([new Uint8Array(file)], { type: "application/octet-stream" }),
-      filename
+    const { payload, boundary } = buildMultipartBody(
+      requestJson, file, filename, "application/octet-stream"
     );
 
     let resp: Response;
     try {
       resp = await fetch(`${BASE_URL}/assets/${assetId}`, {
         method: "PATCH",
-        headers: authHeaders as Record<string, string>,
-        body: formData,
+        headers: {
+          ...(authHeaders as Record<string, string>),
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body: payload,
       });
     } catch (e) {
       throw new RobloxApiError(
@@ -271,7 +291,7 @@ export async function getUserGroups(
 ): Promise<
   Array<{
     group: { id: number; name: string };
-    role: { name: string };
+    role: { name: string; rank: number };
   }>
 > {
   const resp = await fetch(

@@ -16,43 +16,26 @@ model User {
   accessToken      String?  @map("access_token")
   refreshToken     String?  @map("refresh_token")
   tokenExpiresAt   DateTime? @map("token_expires_at")
+  apiKey           String?  @map("api_key")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
-  groupProfiles GroupProfile[]
   projects      Project[]
 
   @@map("users")
 }
 
-model GroupProfile {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  groupId   String   @map("group_id")
-  groupName String   @map("group_name")
-  roleName  String?  @map("role_name")
-  apiKey    String   @map("api_key")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects Project[]
-
-  @@unique([userId, groupId])
-  @@map("group_profiles")
-}
-
 model Project {
-  id             String   @id @default(uuid())
-  userId         String   @map("user_id")
-  name           String
-  creatorType    String   @map("creator_type")
-  groupProfileId String?  @map("group_profile_id")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  creatorType String   @map("creator_type")
+  groupId     String?  @map("group_id")
+  groupName   String?  @map("group_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  groupProfile GroupProfile? @relation(fields: [groupProfileId], references: [id], onDelete: SetNull)
   places       ProjectPlace[]
   assetEntries AssetEntry[]
 

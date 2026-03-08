@@ -10,11 +10,15 @@ export async function GET(_request: NextRequest) {
   try {
     const groups = await getUserGroups(user.robloxUserId);
 
-    const result = groups.map((g) => ({
-      groupId: g.group.id,
-      groupName: g.group.name,
-      roleName: g.role.name,
-    }));
+    const result = groups
+      .filter((g) => g.role.rank >= 100)
+      .sort((a, b) => b.role.rank - a.role.rank)
+      .map((g) => ({
+        groupId: g.group.id,
+        groupName: g.group.name,
+        roleName: g.role.name,
+        roleRank: g.role.rank,
+      }));
 
     return NextResponse.json(result);
   } catch (e) {

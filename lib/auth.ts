@@ -82,6 +82,39 @@ function buildProviders() {
   return providers;
 }
 
+async function refreshAccessToken(token: Record<string, unknown>) {
+  try {
+    const resp = await fetch("https://apis.roblox.com/oauth/v1/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: token.refreshToken as string,
+        client_id: process.env.ROBLOX_CLIENT_ID!,
+        client_secret: process.env.ROBLOX_CLIENT_SECRET!,
+      }),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.error("Token refresh failed:", resp.status, text);
+      return { ...token, error: "RefreshTokenError" };
+    }
+
+    const data = await resp.json();
+    return {
+      ...token,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token ?? token.refreshToken,
+      expiresAt: Math.floor(Date.now() / 1000) + (data.expires_in as number),
+      error: undefined,
+    };
+  } catch (e) {
+    console.error("Token refresh error:", e);
+    return { ...token, error: "RefreshTokenError" };
+  }
+}
+
 const authConfig: NextAuthConfig = {
   providers: buildProviders(),
   pages: {
@@ -95,15 +128,26 @@ const authConfig: NextAuthConfig = {
         token.refreshToken = account.refresh_token;
         token.expiresAt = account.expires_at;
         token.robloxUserId = (profile?.sub as string) || token.sub;
+        return token;
       }
+
+      const expiresAt = (token.expiresAt as number) ?? 0;
+      if (Date.now() / 1000 < expiresAt - 60) {
+        return token;
+      }
+
+      if (token.refreshToken) {
+        return await refreshAccessToken(token);
+      }
+
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.sub!;
-        (session as unknown as Record<string, unknown>).robloxUserId =
-          token.robloxUserId as string;
+        session.user.id = (token.robloxUserId as string) || token.sub!;
       }
+      (session as unknown as Record<string, unknown>).accessToken = token.accessToken;
+      (session as unknown as Record<string, unknown>).error = token.error;
       return session;
     },
   },

@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser, unauthorizedResponse } from "@/lib/auth-guard";
+import { getAuthenticatedUser, getAccessToken, unauthorizedResponse } from "@/lib/auth-guard";
 import { prisma } from "@/lib/db";
-import {
-  createAsset,
-  makeAuthHeaders,
-  RobloxApiError,
-} from "@/lib/roblox-api";
 import { getAssetTypeInfo } from "@/lib/asset-types";
 import { decrypt } from "@/lib/crypto";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const ROBLOX_ASSETS_URL = "https://apis.roblox.com/assets/v1/assets";
 
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser();
@@ -37,38 +33,10 @@ export async function POST(request: Request) {
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, userId: user.id },
-      include: { groupProfile: true },
     });
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
-
-    let authHeaders: ReturnType<typeof makeAuthHeaders>;
-    let creatorType: "user" | "group";
-    let creatorId: string;
-
-    if (project.creatorType === "user") {
-      if (!user.accessToken) {
-        return NextResponse.json(
-          { error: "OAuth token not available. Please re-login." },
-          { status: 400 }
-        );
-      }
-      authHeaders = makeAuthHeaders("oauth", user.accessToken);
-      creatorType = "user";
-      creatorId = user.robloxUserId;
-    } else {
-      if (!project.groupProfile) {
-        return NextResponse.json(
-          { error: "Group profile not found for this project" },
-          { status: 400 }
-        );
-      }
-      const apiKey = decrypt(project.groupProfile.apiKey);
-      authHeaders = makeAuthHeaders("api_key", apiKey);
-      creatorType = "group";
-      creatorId = project.groupProfile.groupId;
     }
 
     const filename = file.name;
@@ -80,16 +48,113 @@ export async function POST(request: Request) {
       );
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const assetId = await createAsset(
-      buffer,
-      filename,
-      typeInfo.apiType,
+    let authHeader: Record<string, string>;
+    let creator: Record<string, string>;
+
+    if (project.creatorType === "user") {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        return NextResponse.json(
+          { error: "OAuth token not available. Please re-login." },
+          { status: 400 }
+        );
+      }
+      authHeader = { Authorization: `Bearer ${accessToken}` };
+      creator = { userId: user.robloxUserId };
+    } else {
+      if (!user.apiKey) {
+        return NextResponse.json(
+          { error: "API キーが設定されていません。設定ページで登録してください。" },
+          { status: 400 }
+        );
+      }
+      if (!project.groupId) {
+        return NextResponse.json(
+          { error: "Group ID not found for this project" },
+          { status: 400 }
+        );
+      }
+      const apiKey = decrypt(user.apiKey);
+      authHeader = { "x-api-key": apiKey };
+      creator = { groupId: project.groupId };
+    }
+
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
+
+    const requestJson = JSON.stringify({
+      assetType: typeInfo.apiType,
       displayName,
-      creatorType,
-      creatorId,
-      authHeaders
-    );
+      description: "",
+      creationContext: { creator },
+    });
+
+    const boundary = `----FormBoundary${Date.now()}`;
+    const parts: Buffer[] = [];
+
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="request"\r\n` +
+      `Content-Type: application/json\r\n\r\n` +
+      `${requestJson}\r\n`
+    ));
+
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="fileContent"; filename="${filename}"\r\n` +
+      `Content-Type: ${typeInfo.contentType}\r\n\r\n`
+    ));
+    parts.push(Buffer.from(fileBytes));
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+    const bodyBuffer = Buffer.concat(parts);
+
+    const resp = await fetch(ROBLOX_ASSETS_URL, {
+      method: "POST",
+      headers: {
+        ...authHeader,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      },
+      body: bodyBuffer,
+    });
+
+    if (!resp.ok) {
+      const respText = await resp.text();
+      let errorMsg: string;
+      try {
+        const errJson = JSON.parse(respText);
+        errorMsg = errJson.message || errJson.errors?.[0]?.message || respText;
+      } catch {
+        errorMsg = respText;
+      }
+
+      if (resp.status === 401 && errorMsg.toLowerCase().includes("invalid api key")) {
+        return NextResponse.json(
+          { error: "API キーが無効です。設定ページで正しいキーを再登録してください。" },
+          { status: 401 }
+        );
+      }
+
+      const status = resp.status === 401 || resp.status === 403 ? 401 : resp.status >= 500 ? 502 : 400;
+      return NextResponse.json({ error: errorMsg }, { status });
+    }
+
+    const respJson = await resp.json();
+    const operationPath = respJson.path;
+
+    let assetId: string | null = null;
+
+    if (respJson.done && respJson.response?.assetId) {
+      assetId = respJson.response.assetId;
+    } else if (operationPath) {
+      assetId = await pollOperation(operationPath, authHeader);
+    }
+
+    if (!assetId) {
+      return NextResponse.json(
+        { error: "Failed to get asset ID from operation" },
+        { status: 502 }
+      );
+    }
 
     await prisma.assetEntry.upsert({
       where: {
@@ -113,21 +178,36 @@ export async function POST(request: Request) {
       category: typeInfo.category,
     });
   } catch (e) {
-    if (e instanceof RobloxApiError) {
-      const status =
-        e.code === "auth" ? 401 : e.code === "validation" ? 400 : 502;
-      return NextResponse.json({ error: e.message }, { status });
-    }
-    if (e instanceof Error && e.message.includes("Invalid encrypted format")) {
-      return NextResponse.json(
-        { error: "Invalid API key configuration" },
-        { status: 500 }
-      );
-    }
     console.error("Upload error:", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Upload failed" },
       { status: 500 }
     );
   }
+}
+
+async function pollOperation(
+  operationPath: string,
+  authHeader: Record<string, string>
+): Promise<string> {
+  const maxPolls = 30;
+  const interval = 2000;
+
+  for (let i = 0; i < maxPolls; i++) {
+    await new Promise((r) => setTimeout(r, interval));
+
+    const resp = await fetch(
+      `https://apis.roblox.com/assets/v1/${operationPath}`,
+      { headers: authHeader }
+    );
+
+    if (!resp.ok) continue;
+
+    const data = await resp.json();
+    if (data.done && data.response?.assetId) {
+      return data.response.assetId;
+    }
+  }
+
+  throw new Error("Operation polling timed out");
 }

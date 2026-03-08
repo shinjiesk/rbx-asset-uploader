@@ -1,14 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export interface Project {
   id: string;
   name: string;
   creatorType: string;
-  groupProfileId?: string | null;
+  groupId?: string | null;
+  groupName?: string | null;
   placesCount?: number;
   assetEntriesCount?: number;
+}
+
+interface RobloxGroup {
+  groupId: number;
+  groupName: string;
+  roleName: string;
+  roleRank: number;
 }
 
 interface ProjectSelectProps {
@@ -18,9 +26,9 @@ interface ProjectSelectProps {
   onCreate: (data: {
     name: string;
     creatorType: string;
-    groupProfileId?: string;
+    groupId?: string;
+    groupName?: string;
   }) => void;
-  groupProfiles: Array<{ id: string; groupName: string }>;
   loading?: boolean;
 }
 
@@ -29,24 +37,34 @@ export function ProjectSelect({
   selectedId,
   onSelect,
   onCreate,
-  groupProfiles,
   loading = false,
 }: ProjectSelectProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createCreatorType, setCreateCreatorType] = useState("user");
-  const [createGroupId, setCreateGroupId] = useState<string>("");
+  const [createGroupId, setCreateGroupId] = useState("");
+  const [createGroupName, setCreateGroupName] = useState("");
+
+  const [robloxGroups, setRobloxGroups] = useState<RobloxGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
 
   const selectedProject = projects.find((p) => p.id === selectedId);
 
+  useEffect(() => {
+    if (showCreateModal && robloxGroups.length === 0) {
+      setGroupsLoading(true);
+      fetch("/api/groups")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => setRobloxGroups(data))
+        .catch(() => {})
+        .finally(() => setGroupsLoading(false));
+    }
+  }, [showCreateModal, robloxGroups.length]);
+
   const getCreatorLabel = () => {
     if (!selectedProject) return null;
-    if (selectedProject.creatorType === "user" || !selectedProject.groupProfileId)
-      return "個人";
-    const group = groupProfiles.find(
-      (g) => g.id === selectedProject.groupProfileId
-    );
-    return group?.groupName ?? "個人";
+    if (selectedProject.creatorType === "user") return "個人";
+    return selectedProject.groupName ?? `グループ ${selectedProject.groupId}`;
   };
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -66,7 +84,8 @@ export function ProjectSelect({
       onCreate({
         name,
         creatorType: "group",
-        groupProfileId: createGroupId,
+        groupId: createGroupId,
+        groupName: createGroupName,
       });
     } else {
       onCreate({ name, creatorType: "user" });
@@ -75,6 +94,7 @@ export function ProjectSelect({
     setCreateName("");
     setCreateCreatorType("user");
     setCreateGroupId("");
+    setCreateGroupName("");
     setShowCreateModal(false);
   };
 
@@ -82,6 +102,7 @@ export function ProjectSelect({
     setCreateName("");
     setCreateCreatorType("user");
     setCreateGroupId("");
+    setCreateGroupName("");
     setShowCreateModal(false);
   };
 
@@ -156,20 +177,38 @@ export function ProjectSelect({
                     if (v === "user") {
                       setCreateCreatorType("user");
                       setCreateGroupId("");
+                      setCreateGroupName("");
                     } else {
                       setCreateCreatorType("group");
                       setCreateGroupId(v);
+                      const g = robloxGroups.find(
+                        (g) => String(g.groupId) === v
+                      );
+                      setCreateGroupName(g?.groupName ?? "");
                     }
                   }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:focus:border-amber-400 dark:focus:ring-amber-400"
                 >
                   <option value="user">自分（個人）</option>
-                  {groupProfiles.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.groupName}
-                    </option>
-                  ))}
+                  {groupsLoading ? (
+                    <option disabled>グループを読み込み中...</option>
+                  ) : (
+                    robloxGroups.length > 0 && (
+                      <optgroup label="Roblox グループ">
+                        {robloxGroups.map((g) => (
+                          <option key={g.groupId} value={String(g.groupId)}>
+                            {g.groupName}（{g.roleName}）
+                          </option>
+                        ))}
+                      </optgroup>
+                    )
+                  )}
                 </select>
+                {!groupsLoading && robloxGroups.length === 0 && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    開発者権限のあるグループが見つかりませんでした
+                  </p>
+                )}
               </div>
             </div>
 
